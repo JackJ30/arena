@@ -28,6 +28,8 @@ void test_regions(); // test designed to exploit region boundaries
 void test_mark(); // test designed to exploit mark
 void test_test_scratch(); // test designed to exploit scratch
 void test_strings();
+// maybe realloc tests
+// maybe multithreading tests
 
 int main() {
 	printf("1 ===== Running general tests...\n");

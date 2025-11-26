@@ -217,11 +217,32 @@ void arena_rewind(ArenaMark m) {
 }
 
 // scratch
-Arena scratch_pool[2] = {0};
-ArenaMark get_scratch_arena(Arena** conflicting, int num_conflicting) {
-    for (int i = 0; i < sizeof(scratch_pool) / sizeof(scratch_pool[0]); i++) {
+#define NUM_SCRATCH_ARENAS 2
+_Thread_local
+Arena scratch_pool[NUM_SCRATCH_ARENAS] = {0};
+_Thread_local
+bool scratch_initialized = false;
+
+void init_scratch(size_t default_region_size) {
+	for (size_t i = 0; i < NUM_SCRATCH_ARENAS; ++i) {
+		arena_create(&scratch_pool[i], default_region_size);
+	}
+	scratch_initialized = true;
+}
+
+void deinit_scratch() {
+	for (size_t i = 0; i < NUM_SCRATCH_ARENAS; ++i) {
+		arena_destroy(&scratch_pool[i]);
+	}
+	scratch_initialized = false;
+}
+
+ArenaMark get_scratch_arena(Arena** conflicting, size_t num_conflicting) {
+	assert(scratch_initialized);
+
+    for (int i = 0; i < NUM_SCRATCH_ARENAS; i++) {
         bool is_conflicting = false;
-        for (int z = 0; z < num_conflicting; z++) {
+        for (size_t z = 0; z < num_conflicting; z++) {
             if (&scratch_pool[i] == conflicting[z]) {
                 is_conflicting = true;
             }
@@ -236,6 +257,7 @@ ArenaMark get_scratch_arena(Arena** conflicting, int num_conflicting) {
     return (ArenaMark){NULL, NULL, NULL};
 }
 
+// debug
 void arena_debug_stats(Arena *a, size_t *allocated, size_t* used, size_t* wasted) {
 	assert(a->first != NULL && a->current != NULL);
 

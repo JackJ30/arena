@@ -50,11 +50,13 @@ char *arena_vsprintf(Arena *a, const char *format, va_list args);
 ArenaMark arena_mark(Arena *a);
 void arena_rewind(ArenaMark m);
 
+// scratch system
+void init_scratch(size_t default_region_size); // thread local scratch arenas must be initialized 
+void deinit_scratch();
+ArenaMark get_scratch_arena(Arena** conflicting, size_t num_conflicting);
+
 // debug
 void arena_debug_stats(Arena *a, size_t *allocated, size_t* used, size_t* wasted);
 void arena_debug_print(Arena *a);
-
-// scratch system
-ArenaMark get_scratch_arena(Arena** conflicting, int num_conflicting);
 
 #endif // _ARENA_H_
