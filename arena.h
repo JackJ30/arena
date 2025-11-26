@@ -49,11 +49,23 @@ char *arena_vsprintf(Arena *a, const char *format, va_list args);
 // mark system
 ArenaMark arena_mark(Arena *a);
 void arena_rewind(ArenaMark m);
+#define arena_temp(arena) \
+    for (ArenaMark _m = arena_mark(arena), *_once = (ArenaMark*)1; _once; _once = NULL, arena_rewind(_m))
 
 // scratch system
-void init_scratch(size_t default_region_size); // thread local scratch arenas must be initialized 
-void deinit_scratch();
+#ifndef DEFAULT_SCRATCH_REGION_SIZE
+#define DEFAULT_SCRATCH_REGION_SIZE 4096
+#endif
 ArenaMark get_scratch_arena(Arena** conflicting, size_t num_conflicting);
+void init_scratch(size_t region_size); // if you want to explicitly init
+void deinit_scratch();
+
+#define arena_temp_scratch(name, conflicting, num_conflicting)			\
+    for (ArenaMark _m = get_scratch_arena(conflicting, num_conflicting),\
+			 *_once = (ArenaMark*)1;									\
+         _once;															\
+         _once = NULL, arena_rewind(_m))								\
+        for (Arena *name = _m.arena; name; name = NULL)
 
 // debug
 void arena_debug_stats(Arena *a, size_t *allocated, size_t* used, size_t* wasted);

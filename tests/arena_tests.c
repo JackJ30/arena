@@ -4,7 +4,6 @@
 
 void test_general() {
 	// test at many different arena block sizes
-	
 	Arena a = {0};
 	arena_create(&a, 4000000);
 
@@ -21,7 +20,27 @@ void test_general() {
 	arena_debug_print(&a);
 	arena_alloc_array(&a, int, 20);
 	arena_debug_print(&a);
+	arena_temp_scratch(scratch, NULL, 0) {
+		for (int i = 0; i < 100; ++i) {
+			str2 = arena_strdup(scratch, "nothina askjdasknjdansd askdjaslnkajsdlnfkajdsfasd fsakdjlbflkdsajbfasdf asdfasdf");
+		}
+		arena_debug_print(scratch);
+	}
+	arena_temp_scratch(scratch, NULL, 0) {
+		arena_debug_print(scratch);
+	}
+	arena_debug_print(&a);
+
 	arena_destroy(&a);
+	deinit_scratch();
+
+	arena_create(&a, 500);
+	ArenaMark m = arena_mark(&a);
+	arena_alloc(&a, 1000, 1);
+	arena_debug_print(&a);
+	arena_rewind(m);
+	arena_alloc(&a, 50, 1); // SHOULD use region #0 again
+	arena_debug_print(&a);
 }
 
 void test_regions(); // test designed to exploit region boundaries

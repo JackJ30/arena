@@ -8,22 +8,10 @@
 #include <string.h>
 #include <stdbool.h>
 
-
-// TODO: add debug statistic collection mode for arena
-// Should collect things like:
-// - How many times new_region was called
-// - How many times existing region was skipped
-// - How many times allocation exceeded ARENA_REGION_DEFAULT_CAPACITY
-
-// Regions
-
-// TODO: instead of accepting specific capacity new_region() should accept the size of the object we want to fit into the region
-// It should be up to new_region() to decide the actual capacity to allocate
 ArenaRegion *new_region(size_t capacity) {
     size_t size = sizeof(ArenaRegion) + capacity;
-    // TODO: it would be nice if we could guarantee that the regions are allocated by ARENA_BACKEND_LIBC_MALLOC are page aligned
     ArenaRegion *r = (ArenaRegion*)malloc(size);
-    assert(r); // TODO: since ARENA_ASSERT is disableable go through all the places where we use it to check for failed memory allocation and return with NULL there.
+    assert(r);
     r->next = NULL;
     r->ptr = r->data;
     r->end = r->data + capacity;
@@ -33,8 +21,6 @@ ArenaRegion *new_region(size_t capacity) {
 void free_region(ArenaRegion *r) {
     free(r);
 }
-
-// Arena
 
 void arena_create(Arena *a, size_t default_region_size) {
 	assert(a->first == NULL && a->current == NULL);
@@ -223,9 +209,9 @@ Arena scratch_pool[NUM_SCRATCH_ARENAS] = {0};
 _Thread_local
 bool scratch_initialized = false;
 
-void init_scratch(size_t default_region_size) {
+void init_scratch(size_t region_size) {
 	for (size_t i = 0; i < NUM_SCRATCH_ARENAS; ++i) {
-		arena_create(&scratch_pool[i], default_region_size);
+		arena_create(&scratch_pool[i], region_size);
 	}
 	scratch_initialized = true;
 }
@@ -238,7 +224,9 @@ void deinit_scratch() {
 }
 
 ArenaMark get_scratch_arena(Arena** conflicting, size_t num_conflicting) {
-	assert(scratch_initialized);
+	if (!scratch_initialized) {
+		init_scratch(DEFAULT_SCRATCH_REGION_SIZE);
+	}
 
     for (int i = 0; i < NUM_SCRATCH_ARENAS; i++) {
         bool is_conflicting = false;

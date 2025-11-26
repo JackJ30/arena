@@ -8,10 +8,12 @@ This is an implementation of the arena allocator described in [Ryan Fleury's art
 You must explicitly initialize the arena with a size. You should pick an amount which your program will never reach, but this arena will still work if you exceed it.
 
 ## Todo
- - goofy ahh scope based cleanup macros for temp/scratch 
  - better tests
  - asan poisoning
+ - look into improving scratch system to not need manual conflict managing (also shared-thread scratch pool that can be deinitialized at once)
  - data structures (dynamic array, pointer stable dynamic array (non continous), hash trie)
- - debug allocation tracking
+ - debug allocation tracking (allocations, padding, waste) also track stats like (how many times new_region, how many times region skipped, how many times allocation was larger than default size)
  
- Possible improvement - thread safe scratch sytem that automatically returns scratch arenas depending if they are "in use" or not (could potentially solve the conflicting arena problem and not force each thread to initialize scratch)
+ maybe
+ - out of memory handling or error/null
+ - re add other memory backends, remove libc dependency (maybe virtual memory, but best improvement is page aligned regions)
