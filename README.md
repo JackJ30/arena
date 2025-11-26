@@ -8,7 +8,6 @@ This is an implementation of the arena allocator described in [Ryan Fleury's art
 You must explicitly initialize the arena with a size. You should pick an amount which your program will never reach, but this arena will still work if you exceed it.
 
 ## Todo
- - smarter realloc if at end
  - asan
  - better tests
  - goofy ahh scope based cleanup macros for temp/scratch 

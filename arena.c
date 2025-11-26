@@ -25,8 +25,8 @@ ArenaRegion *new_region(size_t capacity) {
     ArenaRegion *r = (ArenaRegion*)malloc(size);
     assert(r); // TODO: since ARENA_ASSERT is disableable go through all the places where we use it to check for failed memory allocation and return with NULL there.
     r->next = NULL;
-    r->count = 0;
-    r->capacity = capacity;
+    r->ptr = r->data;
+    r->end = r->data + capacity;
     return r;
 }
 
@@ -58,27 +58,18 @@ void arena_destroy(Arena *a) {
     a->current = NULL;
 }
 
-size_t get_aligned_offset(ArenaRegion* region, size_t align) {
-	uintptr_t base = (uintptr_t)region->data;
-	uintptr_t ptr  = base + region->count;
-	uintptr_t aligned = (ptr + (align - 1)) & ~(uintptr_t)(align - 1);
-	return aligned - base;
-}
-
 void *arena_alloc(Arena *a, size_t size, size_t align) {
 	assert(a->first != NULL && a->current != NULL);
 	assert((align & (align - 1)) == 0); // alignment must be power of 2
 
 	while (true) {
-		uintptr_t base = (uintptr_t)a->current->data;
-		uintptr_t ptr  = base + a->current->count;
-		uintptr_t aligned = (ptr + (align - 1)) & ~(uintptr_t)(align - 1);
-		size_t aligned_offset = aligned - base;
 
-		// fits in this region
-		if (aligned_offset + size <= a->current->capacity) {
+		// if fits in this region (with alignment)
+		uintptr_t aligned = ((uintptr_t)a->current->ptr + (align - 1)) & ~(uintptr_t)(align - 1);
+		uint8_t* next = (uint8_t*)(aligned + size);
+		if (next <= a->current->end) {
 			// allocate it
-            a->current->count = aligned_offset + size;
+            a->current->ptr = next;
             return (void*)aligned;
 		}
 
@@ -86,8 +77,9 @@ void *arena_alloc(Arena *a, size_t size, size_t align) {
         if (a->current->next) {
             a->current = a->current->next;
         } else {
+			// allocate a new region big enough to hold the allocation (with alignment)
             size_t cap = a->default_region_size;
-            if (cap < align + size) cap = align + size;
+            if (cap < align + size - 1) cap = align + size - 1;
             a->current->next = new_region(cap);
             a->current = a->current->next;
         }
@@ -105,16 +97,42 @@ void *arena_alloc_zero(Arena *a, size_t size, size_t align) {
 void *arena_realloc(Arena *a, void *oldptr, size_t oldsz, size_t newsz, size_t align) {
 	assert(a->first != NULL && a->current != NULL);
 
-    if (newsz <= oldsz) return oldptr;
-    void *newptr = arena_alloc(a, newsz, align);
-    char *newptr_char = (char*)newptr;
-    char *oldptr_char = (char*)oldptr;
-    for (size_t i = 0; i < oldsz; ++i) {
-        newptr_char[i] = oldptr_char[i];
-    }
-    return newptr;
+	// find the region that oldptr is in
+	ArenaRegion *r = a->first;
+	while (r != NULL) {
+		if ((uint8_t*)oldptr >= r->data && (uint8_t*)oldptr < r->end) {
+			// found the region
+			assert((uint8_t*)oldptr + oldsz <= r->ptr);
+			break;
+		}
+		r = r->next;
+	}
+	assert(r != NULL); // oldptr must be in a region
 
-	// realloc improvement will have to confirm alignment
+	if (((uintptr_t)oldptr % align) == 0) {
+		// the alignment on the old pointer is still okay, so we can attempt to re-use it
+
+		// check if we are at the end of the stack
+		if ((uint8_t*)oldptr + oldsz == r->ptr) {
+			// check if we are shrinking or not
+			if (newsz <= oldsz) {
+				r->ptr = (uint8_t*)oldptr + newsz;
+				return oldptr;
+			} else if ((uint8_t*)oldptr + newsz <= r->end) {
+				// grow stack if it fits in region
+				r->ptr = (uint8_t*)oldptr + newsz;
+                return oldptr;
+			}
+		} else if (newsz <= oldsz) {
+			// if we aren't at the end of the stack and we are shrinking, do nothing
+			return oldptr;
+		}
+	}
+
+	// if all else, reallocate and copy
+	void *newptr = arena_alloc(a, newsz, align);
+	memcpy(newptr, oldptr, oldsz < newsz ? oldsz : newsz);
+	return newptr;
 }
 
 
@@ -122,7 +140,7 @@ void arena_reset(Arena *a) {
 	assert(a->first != NULL && a->current != NULL);
 
     for (ArenaRegion *r = a->first; r != NULL; r = r->next) {
-        r->count = 0;
+        r->ptr = r->data;
     }
 
     a->current = a->first;
@@ -131,7 +149,6 @@ void arena_reset(Arena *a) {
 void arena_trim(Arena *a) {
 	assert(a->first != NULL && a->current != NULL);
 
-	if (!a->current) return;
     ArenaRegion *r = a->current->next;
     while (r) {
         ArenaRegion *r0 = r;
@@ -181,9 +198,9 @@ ArenaMark arena_mark(Arena *a) {
 	assert(a->first != NULL && a->current != NULL);
 
     ArenaMark m;
-	m.arena = a;
+	m.arena  = a;
 	m.region = a->current;
-	m.count  = a->current->count;
+	m.ptr    = a->current->ptr;
 
     return m;
 }
@@ -191,9 +208,9 @@ ArenaMark arena_mark(Arena *a) {
 void arena_rewind(ArenaMark m) {
 	assert(m.arena != NULL && m.region != NULL && m.arena->first != NULL && m.arena->current != NULL);
 
-    m.region->count = m.count;
+    m.region->ptr = m.ptr;
     for (ArenaRegion *r = m.region->next; r != NULL; r = r->next) {
-        r->count = 0;
+        r->ptr = r->data;
     }
 
     m.arena->current = m.region;
@@ -216,7 +233,7 @@ ArenaMark get_scratch_arena(Arena** conflicting, int num_conflicting) {
     }
 
 	assert(false); // should be unreachable unless something is wrong
-    return (ArenaMark){NULL, NULL, -1};
+    return (ArenaMark){NULL, NULL, NULL};
 }
 
 void arena_debug_stats(Arena *a, size_t *allocated, size_t* used, size_t* wasted) {
@@ -231,9 +248,9 @@ void arena_debug_stats(Arena *a, size_t *allocated, size_t* used, size_t* wasted
     while (r) {
 		if (r == a->current) reached_current = true;
 
-		if (allocated) *allocated += r->capacity;
-		if (used) *used += r->count;
-		if (wasted && !reached_current) *wasted += r->capacity - r->count;
+		if (allocated) *allocated += r->end - r->data;
+		if (used) *used += r->ptr - r->data;
+		if (wasted && !reached_current) *wasted += r->end - r->ptr;
 
         r = r->next;
     }
@@ -253,7 +270,7 @@ void arena_debug_print(Arena *a) {
 		if (r == a->current) {
 			selected = " <---";
 		}
-		printf("Region %zu: [%zu/%zu bytes]%s\n", cur, r->count, r->capacity, selected);
+		printf("Region %zu: [%zu/%zu bytes]%s\n", cur, r->ptr - r->data, r->end - r->data, selected);
         r = r->next;
 		++cur;
     }

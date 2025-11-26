@@ -8,8 +8,8 @@
 typedef struct ArenaRegion ArenaRegion;
 struct ArenaRegion {
     ArenaRegion *next;
-    size_t count;
-    size_t capacity;
+	uint8_t* ptr;
+	uint8_t* end;
     uint8_t data[];
 };
 
@@ -21,7 +21,7 @@ typedef struct {
 typedef struct  {
 	Arena* arena;
     ArenaRegion *region;
-    size_t count;
+	uint8_t* ptr;
 } ArenaMark;
 
 // base functions
@@ -36,8 +36,8 @@ void arena_reset(Arena *a);
 void arena_trim(Arena *a);
 
 // alloc macros
-#define arena_alloc_array(arena, type, count) (type *)arena_alloc((arena), sizeof(type)*(count))
-#define arena_alloc_array_zero(arena, type, count) (type *)arena_alloc_zero((arena), sizeof(type)*(count))
+#define arena_alloc_array(arena, type, count) (type *)arena_alloc((arena), sizeof(type)*(count), _Alignof(type))
+#define arena_alloc_array_zero(arena, type, count) (type *)arena_alloc_zero((arena), sizeof(type)*(count), _Alignof(type))
 #define arena_alloc_struct(arena, type) arena_alloc_array((arena), (type), 1)
 #define arena_alloc_struct_zero(arena, type) arena_alloc_array_zero((arena), (type), 1)
 
