@@ -6,12 +6,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdbool.h>
 
 ArenaRegion *new_region(size_t capacity) {
     size_t size = sizeof(ArenaRegion) + capacity;
     ArenaRegion *r = (ArenaRegion*)malloc(size);
-    assert(r);
+	if (r == NULL) {
+		assert(false);
+		return NULL;
+	}
     r->next = NULL;
     r->ptr = r->data;
     r->end = r->data + capacity;
@@ -22,13 +24,15 @@ void free_region(ArenaRegion *r) {
     free(r);
 }
 
-void arena_create(Arena *a, size_t default_region_size) {
+bool arena_create(Arena *a, size_t default_region_size) {
 	assert(a->first == NULL && a->current == NULL);
 
 	// create first region and set region size
 	a->current = new_region(default_region_size);
 	a->first = a->current;
 	a->default_region_size = default_region_size;
+
+	return a->current != NULL;
 }
 
 void arena_destroy(Arena *a) {
@@ -48,8 +52,9 @@ void *arena_alloc(Arena *a, size_t size, size_t align) {
 	assert(a->first != NULL && a->current != NULL);
 	assert((align & (align - 1)) == 0); // alignment must be power of 2
 
-	while (true) {
+	if (size == 0) return NULL;
 
+	while (true) {
 		// if fits in this region (with alignment)
 		uintptr_t aligned = ((uintptr_t)a->current->ptr + (align - 1)) & ~(uintptr_t)(align - 1);
 		uint8_t* next = (uint8_t*)(aligned + size);
@@ -66,8 +71,10 @@ void *arena_alloc(Arena *a, size_t size, size_t align) {
 			// allocate a new region big enough to hold the allocation (with alignment)
             size_t cap = a->default_region_size;
             if (cap < align + size - 1) cap = align + size - 1;
+			assert(cap >= size);
             a->current->next = new_region(cap);
             a->current = a->current->next;
+			if (a->current == NULL) return NULL; // failed to allocate region
         }
 	}
 }
@@ -76,7 +83,7 @@ void *arena_alloc_zero(Arena *a, size_t size, size_t align) {
 	assert(a->first != NULL && a->current != NULL);
 
 	void* ret = arena_alloc(a, size, align);
-	memset(ret, 0, size);
+	if (ret) memset(ret, 0, size);
 	return ret;
 }
 
@@ -117,7 +124,7 @@ void *arena_realloc(Arena *a, void *oldptr, size_t oldsz, size_t newsz, size_t a
 
 	// if all else, reallocate and copy
 	void *newptr = arena_alloc(a, newsz, align);
-	memcpy(newptr, oldptr, oldsz < newsz ? oldsz : newsz);
+	if (newptr) memcpy(newptr, oldptr, oldsz < newsz ? oldsz : newsz);
 	return newptr;
 }
 
@@ -149,8 +156,10 @@ char *arena_strdup(Arena *a, const char *cstr) {
 
     size_t n = strlen(cstr);
     char *dup = (char*)arena_alloc(a, n + 1, _Alignof(char));
-    memcpy(dup, cstr, n);
-    dup[n] = '\0';
+	if (dup) {
+		memcpy(dup, cstr, n);
+		dup[n] = '\0';
+	}
     return dup;
 }
 
@@ -164,7 +173,7 @@ char *arena_vsprintf(Arena *a, const char *format, va_list args) {
 
     assert(n >= 0);
     char *result = (char*)arena_alloc(a, n + 1, _Alignof(char));
-    vsnprintf(result, n + 1, format, args);
+    if (result) vsnprintf(result, n + 1, format, args);
 
     return result;
 }
@@ -209,14 +218,14 @@ Arena scratch_pool[NUM_SCRATCH_ARENAS] = {0};
 _Thread_local
 bool scratch_initialized = false;
 
-void init_scratch(size_t region_size) {
+void init_scratch_pool(size_t region_size) {
 	for (size_t i = 0; i < NUM_SCRATCH_ARENAS; ++i) {
 		arena_create(&scratch_pool[i], region_size);
 	}
 	scratch_initialized = true;
 }
 
-void deinit_scratch() {
+void deinit_scratch_pool() {
 	for (size_t i = 0; i < NUM_SCRATCH_ARENAS; ++i) {
 		arena_destroy(&scratch_pool[i]);
 	}
@@ -225,7 +234,7 @@ void deinit_scratch() {
 
 ArenaMark get_scratch_arena(Arena** conflicting, size_t num_conflicting) {
 	if (!scratch_initialized) {
-		init_scratch(DEFAULT_SCRATCH_REGION_SIZE);
+		init_scratch_pool(DEFAULT_SCRATCH_REGION_SIZE);
 	}
 
     for (int i = 0; i < NUM_SCRATCH_ARENAS; i++) {
@@ -243,6 +252,10 @@ ArenaMark get_scratch_arena(Arena** conflicting, size_t num_conflicting) {
 
 	assert(false); // should be unreachable unless something is wrong
     return (ArenaMark){NULL, NULL, NULL};
+}
+
+void done_scratch_arena(ArenaMark mark) {
+	arena_rewind(mark);
 }
 
 // debug

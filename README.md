@@ -8,9 +8,10 @@ This is an implementation of the arena allocator described in [Ryan Fleury's art
 You must explicitly initialize the arena with a size. You should pick an amount which your program will never reach, but this arena will still work if you exceed it.
 
 ## Todo
+ - allocation failure and zero allocation
  - better tests
  - asan poisoning
- - look into improving scratch system to not need manual conflict managing (also shared-thread scratch pool that can be deinitialized at once)
+ - look into improving scratch system to not need manual conflict managing (also shared-thread scratch pool that can be deinitialized at once) (also maybe scratch doesn't need to be manually cleaned up)
  - data structures (dynamic array, pointer stable dynamic array (non continous), hash trie)
  - debug allocation tracking (allocations, padding, waste) also track stats like (how many times new_region, how many times region skipped, how many times allocation was larger than default size)
  

@@ -32,7 +32,7 @@ void test_general() {
 	arena_debug_print(&a);
 
 	arena_destroy(&a);
-	deinit_scratch();
+	deinit_scratch_pool();
 
 	arena_create(&a, 500);
 	ArenaMark m = arena_mark(&a);

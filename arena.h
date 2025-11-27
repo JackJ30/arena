@@ -2,6 +2,7 @@
 #define _ARENA_H_
 
 #include <stdarg.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -25,7 +26,7 @@ typedef struct  {
 } ArenaMark;
 
 // base functions
-void arena_create(Arena *a, size_t default_region_size);
+bool arena_create(Arena *a, size_t default_region_size);
 void arena_destroy(Arena *a);
 
 // allocations
@@ -57,14 +58,16 @@ void arena_rewind(ArenaMark m);
 #define DEFAULT_SCRATCH_REGION_SIZE 4096
 #endif
 ArenaMark get_scratch_arena(Arena** conflicting, size_t num_conflicting);
-void init_scratch(size_t region_size); // if you want to explicitly init
-void deinit_scratch();
+void done_scratch_arena(ArenaMark mark);
+// scratch pool
+void init_scratch_pool(size_t region_size); // if you want to explicitly init
+void deinit_scratch_pool();
 
 #define arena_temp_scratch(name, conflicting, num_conflicting)			\
     for (ArenaMark _m = get_scratch_arena(conflicting, num_conflicting),\
 			 *_once = (ArenaMark*)1;									\
          _once;															\
-         _once = NULL, arena_rewind(_m))								\
+         _once = NULL, done_scratch_arena(_m))							\
         for (Arena *name = _m.arena; name; name = NULL)
 
 // debug
